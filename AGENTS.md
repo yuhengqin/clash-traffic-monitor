@@ -68,7 +68,7 @@ go build -o traffic-monitor .
 
 ## Local Deployment Snapshot (2026-11-07)
 
-- This checkout is `D:\chat\traffic-monitor-lan`; the existing Windows collector executable and database are in `D:\chat\clash-traffic-monitor`. Do not replace, stop, or delete them without checking ownership and preserving the database.
+- The main checkout and existing Windows collector executable and database are in `D:\chat\clash-traffic-monitor`; the currently running source-switcher gateway uses the separate `D:\chat\traffic-monitor-lan` checkout. Changes merged here do not automatically update that gateway or the Lenovo deployment. Do not replace, stop, or delete running components without checking ownership and preserving the databases.
 - Windows collector listens on `127.0.0.1:18080`; `python gateway.py` serves the two-source dashboard on `127.0.0.1:18081`. Current-user Run entries start the collector and gateway at login. Actual operation depends on the configured Python executable and paths remaining available.
 - Lenovo (`lenovo_r720`, user `laoq`) runs `traffic-monitor-lan.service` as a systemd user service in `~/.local/share/traffic-monitor-lan`, with its own SQLite database and Mihomo controller on loopback port 9090. The server listens on port 18080; `TRAFFIC_MONITOR_LAN_HOST` enables only GET traffic endpoints and health for the configured LAN Host. Verify current service state before changes.
 - `gateway.py` currently targets Lenovo's LAN IP `192.168.0.105`; if it changes, update the gateway and the server's allowed Host together. Keep remote settings/control endpoints inaccessible over LAN; do not expose controller secrets, credentials files, databases, or browsing history in commits or logs.
