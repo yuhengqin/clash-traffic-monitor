@@ -2255,7 +2255,11 @@ func (s *service) routes() http.Handler {
 func (s *service) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host, _, err := net.SplitHostPort(r.Host)
-		if err != nil || (host != "127.0.0.1" && host != "localhost" && host != "::1") {
+		remoteHost, _, remoteErr := net.SplitHostPort(r.RemoteAddr)
+		remoteIP := net.ParseIP(remoteHost)
+		loopback := remoteErr == nil && remoteIP != nil && remoteIP.IsLoopback() && (host == "127.0.0.1" || host == "localhost" || host == "::1")
+		lanRead := host != "" && host == os.Getenv("TRAFFIC_MONITOR_LAN_HOST") && r.Method == http.MethodGet && (strings.HasPrefix(r.URL.Path, "/api/traffic/") || r.URL.Path == "/health")
+		if err != nil || (!loopback && !lanRead) {
 			http.Error(w, "local access only", http.StatusForbidden)
 			return
 		}

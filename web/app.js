@@ -55,6 +55,7 @@ const autoSwitchStatusLabels = {
 }
 
 const elements = {
+  dataSource: document.getElementById("dataSource"),
   dimension: document.getElementById("dimension"),
   dimensionTabs: Array.from(document.querySelectorAll(".dimension-tab")),
   range: document.getElementById("range"),
@@ -120,6 +121,7 @@ const elements = {
 }
 
 const state = {
+  source: "local",
   lastTrendPoints: [],
   trendPlotPoints: [],
   trendHoverIndex: -1,
@@ -428,11 +430,11 @@ function syncDimensionTabs() {
 
 function syncContextSummary() {
   const config = drilldownConfig[elements.dimension.value] || drilldownConfig.sourceIP
-  elements.runtimeConnectionState.textContent = state.mihomoSettings.url ? "已配置" : "待配置"
+  elements.runtimeConnectionState.textContent = state.source === "lenovo" ? "Lenovo（只读）" : (state.mihomoSettings.url ? "本机已配置" : "本机待配置")
   elements.runtimeDimension.textContent = config.primaryTitle
   elements.runtimeRangeLabel.textContent = currentRangeLabel()
-  elements.runtimeAutoSwitchState.textContent = state.autoSwitch.enabled ? "已开启" : "未开启"
-  elements.runtimeAutoSwitchMeta.textContent = buildAutoSwitchSummary()
+  elements.runtimeAutoSwitchState.textContent = state.source === "lenovo" ? "不可用" : (state.autoSwitch.enabled ? "已开启" : "未开启")
+  elements.runtimeAutoSwitchMeta.textContent = state.source === "lenovo" ? "服务器数据仅供查看" : buildAutoSwitchSummary()
 
   if (!state.selectedPrimary) {
     elements.selectionPath.textContent = `当前维度为${config.countLabel}，等待选择主分组。`
@@ -497,7 +499,8 @@ async function fetchJSON(path, params) {
     }
   })
 
-  const response = await fetch(url)
+  const headers = path.startsWith("/api/traffic/") ? {"X-Traffic-Source": state.source} : {}
+  const response = await fetch(url, {headers})
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}))
     throw new Error(payload.error || `Request failed: ${response.status}`)
@@ -1276,6 +1279,7 @@ function renderTrend(points) {
 }
 
 async function loadSecondaryRows(primaryLabel) {
+  const sourceAtStart = state.source
   const { start, end } = getTimeRange()
   const dimension = elements.dimension.value
 
@@ -1305,6 +1309,7 @@ async function loadSecondaryRows(primaryLabel) {
   }
 
   const rows = await fetchJSON(path, params)
+  if (sourceAtStart !== state.source) return
   state.secondaryRows = rows
   state.selectedSecondary = subdomainMode ? null : (rows[0]?.label || null)
   renderSecondaryTable(rows)
@@ -1401,17 +1406,36 @@ async function loadData() {
 
     if (state.selectedPrimary) {
       await loadSecondaryRows(state.selectedPrimary)
+      if (seq !== state.loadSeq) return
       renderPrimaryTable(state.primaryRows)
     }
 
-    setStatus("")
+    if (seq === state.loadSeq) setStatus("")
   } catch (error) {
     console.error(error)
-    setStatus(error.message || "加载失败", true)
+    if (seq === state.loadSeq) setStatus(error.message || "加载失败", true)
   } finally {
     elements.refreshBtn.disabled = false
   }
 }
+
+elements.dataSource.addEventListener("change", () => {
+  state.source = elements.dataSource.value
+  state.loadSeq++
+  state.detailSeq++
+  state.primaryRows = []
+  state.selectedPrimary = null
+  renderCards([])
+  renderPrimaryTable([])
+  renderTrend([])
+  resetDetailPanels()
+  const remote = state.source === "lenovo"
+  elements.settingsBtn.disabled = remote
+  elements.autoSwitchBtn.disabled = remote
+  elements.settingsBtn.title = remote ? "Lenovo 数据为只读" : ""
+  elements.autoSwitchBtn.title = remote ? "Lenovo 数据为只读" : ""
+  loadData()
+})
 
 elements.modeTabs.forEach((tab) => {
   tab.addEventListener("click", () => {

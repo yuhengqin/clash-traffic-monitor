@@ -22,6 +22,7 @@ import (
 func localTestRequest(method, target string, body io.Reader) *http.Request {
 	req := httptest.NewRequest(method, target, body)
 	req.Host = "127.0.0.1:18080"
+	req.RemoteAddr = "127.0.0.1:50000"
 	return req
 }
 
