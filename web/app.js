@@ -1,4 +1,12 @@
 const drilldownConfig = {
+  process: {
+    countLabel: "应用",
+    primaryTitle: "应用排行",
+    secondaryColumn: "访问主机",
+    buildSecondaryTitle: (primary) => (primary ? `${primary} 访问的主机` : "访问主机"),
+    buildDetailTitle: (primary, secondary) =>
+      primary && secondary ? `${primary} / ${secondary} 的连接明细` : "连接明细",
+  },
   sourceIP: {
     countLabel: "设备",
     primaryTitle: "设备排行",
@@ -306,8 +314,11 @@ function currentRangeLabel() {
 }
 
 function syncModeUI() {
+  if (elements.dimension.value === "process" && state.mode === "summary") state.mode = "detail"
   document.body.classList.toggle("summary-mode", state.mode === "summary")
   elements.modeTabs.forEach((tab) => {
+    tab.disabled = tab.dataset.mode === "summary" && elements.dimension.value === "process"
+    tab.title = tab.disabled ? "应用维度仅支持细节模式" : ""
     tab.classList.toggle("active", tab.dataset.mode === state.mode)
   })
   if (elements.secondaryChart) {
@@ -1436,6 +1447,7 @@ elements.dimensionTabs.forEach((button) => {
     const nextDimension = button.dataset.dimension
     if (!nextDimension || nextDimension === elements.dimension.value) return
     elements.dimension.value = nextDimension
+    syncModeUI()
     persistSelectedDimension(nextDimension)
     updateViewHints()
     loadData()

@@ -27,7 +27,7 @@ import (
 var webAssets embed.FS
 
 const (
-	defaultListenAddr      = ":8080"
+	defaultListenAddr      = "127.0.0.1:18080"
 	defaultPollInterval    = 5 * time.Second
 	aggregateFlushInterval = 10 * time.Minute
 	summaryBucketSize      = int64(24 * time.Hour / time.Millisecond)
@@ -37,7 +37,6 @@ const (
 	// write volume (5s polls, per-connection deltas) the WAL can otherwise grow
 	// to hundreds of MB, which slows every read that must merge it.
 	walCheckpointInterval = 5 * time.Minute
-	defaultAllowedOrigin  = "*"
 )
 
 var isContainerRuntime = func() bool {
@@ -189,6 +188,7 @@ type service struct {
 	domainGroupingEnabled  bool
 	filterDirectTraffic    bool
 	lastConnections        map[string]connection
+	collectorBaselineReady bool
 	lastUploadTotal        int64
 	lastDownloadTotal      int64
 	lastAutoSwitchAt       int64
@@ -1279,6 +1279,19 @@ func (s *service) collectOnce(ctx context.Context) {
 		log.Printf("poll Mihomo connections: %v", err)
 		return
 	}
+	s.mu.Lock()
+	if !s.collectorBaselineReady {
+		s.lastConnections = make(map[string]connection, len(resp.Connections))
+		for _, conn := range resp.Connections {
+			s.lastConnections[conn.ID] = conn
+		}
+		s.lastUploadTotal = resp.UploadTotal
+		s.lastDownloadTotal = resp.DownloadTotal
+		s.collectorBaselineReady = true
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
 
 	if err := s.processConnections(ctx, resp); err != nil {
 		log.Printf("process connections: %v", err)
@@ -1299,6 +1312,7 @@ func (s *service) setMihomoSettings(settings mihomoSettings) {
 
 	if settings != s.mihomoSettings {
 		s.lastConnections = make(map[string]connection)
+		s.collectorBaselineReady = false
 		s.lastUploadTotal = 0
 		s.lastDownloadTotal = 0
 	}
@@ -2240,9 +2254,16 @@ func (s *service) routes() http.Handler {
 
 func (s *service) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", defaultAllowedOrigin)
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
+		host, _, err := net.SplitHostPort(r.Host)
+		if err != nil || (host != "127.0.0.1" && host != "localhost" && host != "::1") {
+			http.Error(w, "local access only", http.StatusForbidden)
+			return
+		}
+		origin := r.Header.Get("Origin")
+		if (origin != "" && origin != "http://"+r.Host) || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+			http.Error(w, "cross-origin access denied", http.StatusForbidden)
+			return
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

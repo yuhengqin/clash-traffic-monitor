@@ -19,6 +19,12 @@ import (
 	"time"
 )
 
+func localTestRequest(method, target string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, target, body)
+	req.Host = "127.0.0.1:18080"
+	return req
+}
+
 func TestQueryAggregate(t *testing.T) {
 	svc := newTestService(t)
 
@@ -134,8 +140,8 @@ func TestLoadConfigDefaultsRetentionPolicy(t *testing.T) {
 		t.Fatalf("loadConfig: %v", err)
 	}
 
-	if cfg.ListenAddr != ":8080" {
-		t.Fatalf("expected listen addr default to be :8080, got %q", cfg.ListenAddr)
+	if cfg.ListenAddr != "127.0.0.1:18080" {
+		t.Fatalf("expected loopback listen addr default, got %q", cfg.ListenAddr)
 	}
 	if cfg.MihomoURL != "" {
 		t.Fatalf("expected mihomo url default to be empty, got %q", cfg.MihomoURL)
@@ -2149,32 +2155,32 @@ func TestAutoSwitchCreatesRestoreSession(t *testing.T) {
 func TestAutoRestore(t *testing.T) {
 	newTriggerResponses := func(host string) (*connectionsResponse, *connectionsResponse) {
 		return &connectionsResponse{
-			Connections: []connection{{
-				ID:       "conn-1",
-				Upload:   100,
-				Download: 100,
-				Chains:   []string{"🌍 国外媒体"},
-				Metadata: struct {
-					SourceIP      string "json:\"sourceIP\""
-					Host          string "json:\"host\""
-					DestinationIP string "json:\"destinationIP\""
-					Process       string "json:\"process\""
-				}{SourceIP: "192.168.1.2", Host: host, DestinationIP: "1.1.1.1", Process: "chrome"},
-			}},
-		}, &connectionsResponse{
-			Connections: []connection{{
-				ID:       "conn-1",
-				Upload:   250,
-				Download: 150,
-				Chains:   []string{"🌍 国外媒体"},
-				Metadata: struct {
-					SourceIP      string "json:\"sourceIP\""
-					Host          string "json:\"host\""
-					DestinationIP string "json:\"destinationIP\""
-					Process       string "json:\"process\""
-				}{SourceIP: "192.168.1.2", Host: host, DestinationIP: "1.1.1.1", Process: "chrome"},
-			}},
-		}
+				Connections: []connection{{
+					ID:       "conn-1",
+					Upload:   100,
+					Download: 100,
+					Chains:   []string{"🌍 国外媒体"},
+					Metadata: struct {
+						SourceIP      string "json:\"sourceIP\""
+						Host          string "json:\"host\""
+						DestinationIP string "json:\"destinationIP\""
+						Process       string "json:\"process\""
+					}{SourceIP: "192.168.1.2", Host: host, DestinationIP: "1.1.1.1", Process: "chrome"},
+				}},
+			}, &connectionsResponse{
+				Connections: []connection{{
+					ID:       "conn-1",
+					Upload:   250,
+					Download: 150,
+					Chains:   []string{"🌍 国外媒体"},
+					Metadata: struct {
+						SourceIP      string "json:\"sourceIP\""
+						Host          string "json:\"host\""
+						DestinationIP string "json:\"destinationIP\""
+						Process       string "json:\"process\""
+					}{SourceIP: "192.168.1.2", Host: host, DestinationIP: "1.1.1.1", Process: "chrome"},
+				}},
+			}
 	}
 
 	t.Run("restore happens after quiet minutes with no new trigger", func(t *testing.T) {
@@ -2556,7 +2562,7 @@ func TestCollectOnceSkipsPollingWhenMihomoURLIsUnset(t *testing.T) {
 func TestHandleMihomoSettingsRoundTrip(t *testing.T) {
 	svc := newTestService(t)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/settings/mihomo", bytes.NewBufferString(`{"url":"http://127.0.0.1:9090/","secret":"test-secret"}`))
+	req := localTestRequest(http.MethodPut, "/api/settings/mihomo", bytes.NewBufferString(`{"url":"http://127.0.0.1:9090/","secret":"test-secret"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -2585,7 +2591,7 @@ func TestHandleMihomoSettingsRoundTrip(t *testing.T) {
 		t.Fatalf("expected persisted settings to match response, got %+v want %+v", stored, updated)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/settings/mihomo", nil)
+	getReq := localTestRequest(http.MethodGet, "/api/settings/mihomo", nil)
 	getRec := httptest.NewRecorder()
 	svc.routes().ServeHTTP(getRec, getReq)
 
@@ -2605,7 +2611,7 @@ func TestHandleMihomoSettingsRoundTrip(t *testing.T) {
 func TestHandleMihomoSettingsRejectsEmptyURL(t *testing.T) {
 	svc := newTestService(t)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/settings/mihomo", bytes.NewBufferString(`{"url":"   ","secret":""}`))
+	req := localTestRequest(http.MethodPut, "/api/settings/mihomo", bytes.NewBufferString(`{"url":"   ","secret":""}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -2619,7 +2625,7 @@ func TestHandleMihomoSettingsRejectsEmptyURL(t *testing.T) {
 func TestHandleAutoSwitchSettingsRoundTrip(t *testing.T) {
 	svc := newTestService(t)
 
-	putReq := httptest.NewRequest(http.MethodPut, "/api/auto-switch/settings", bytes.NewBufferString(`{
+	putReq := localTestRequest(http.MethodPut, "/api/auto-switch/settings", bytes.NewBufferString(`{
 		"enabled": true,
 		"thresholdBytesPerMinute": 536870912,
 		"cooldownSeconds": 900,
@@ -2652,7 +2658,7 @@ func TestHandleAutoSwitchSettingsRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected saved group targets: %+v", updated.GroupTargets)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/auto-switch/settings", nil)
+	getReq := localTestRequest(http.MethodGet, "/api/auto-switch/settings", nil)
 	getRec := httptest.NewRecorder()
 	svc.routes().ServeHTTP(getRec, getReq)
 
@@ -2675,7 +2681,7 @@ func TestHandleAutoSwitchSettingsRoundTrip(t *testing.T) {
 func TestHandleAutoSwitchSettingsRejectsInvalidThreshold(t *testing.T) {
 	svc := newTestService(t)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/auto-switch/settings", bytes.NewBufferString(`{
+	req := localTestRequest(http.MethodPut, "/api/auto-switch/settings", bytes.NewBufferString(`{
 		"enabled": true,
 		"thresholdBytesPerMinute": 0,
 		"cooldownSeconds": 60,
@@ -2694,7 +2700,7 @@ func TestHandleAutoSwitchSettingsRejectsInvalidThreshold(t *testing.T) {
 func TestHandleAutoSwitchSettingsRejectsNegativeRestoreQuietMinutes(t *testing.T) {
 	svc := newTestService(t)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/auto-switch/settings", bytes.NewBufferString(`{
+	req := localTestRequest(http.MethodPut, "/api/auto-switch/settings", bytes.NewBufferString(`{
 		"enabled": true,
 		"thresholdBytesPerMinute": 300,
 		"cooldownSeconds": 60,
@@ -2731,7 +2737,7 @@ func TestHandleAutoSwitchGroupsReturnsControllableGroups(t *testing.T) {
 		}),
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auto-switch/groups", nil)
+	req := localTestRequest(http.MethodGet, "/api/auto-switch/groups", nil)
 	rec := httptest.NewRecorder()
 	svc.routes().ServeHTTP(rec, req)
 
@@ -2764,7 +2770,7 @@ func TestHandleAutoSwitchEventsReturnsRecentEvents(t *testing.T) {
 		t.Fatalf("insertAutoSwitchEvent: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auto-switch/events", nil)
+	req := localTestRequest(http.MethodGet, "/api/auto-switch/events", nil)
 	rec := httptest.NewRecorder()
 	svc.routes().ServeHTTP(rec, req)
 
@@ -2799,7 +2805,7 @@ func TestHandleAutoSwitchEventsLimitsToFifty(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auto-switch/events", nil)
+	req := localTestRequest(http.MethodGet, "/api/auto-switch/events", nil)
 	rec := httptest.NewRecorder()
 	svc.routes().ServeHTTP(rec, req)
 
@@ -2837,7 +2843,7 @@ func TestHandleAutoSwitchEventsReturnsRestoreStatuses(t *testing.T) {
 		t.Fatalf("insertAutoSwitchEvent: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auto-switch/events", nil)
+	req := localTestRequest(http.MethodGet, "/api/auto-switch/events", nil)
 	rec := httptest.NewRecorder()
 	svc.routes().ServeHTTP(rec, req)
 
@@ -2930,7 +2936,7 @@ func TestSummaryAPIEndpointsUseSummaryTable(t *testing.T) {
 
 	start := dayStart - day
 	end := dayStart - 1
-	req := httptest.NewRequest(
+	req := localTestRequest(
 		http.MethodGet,
 		"/api/traffic/aggregate?dimension=sourceIP&start="+strconv.FormatInt(start, 10)+"&end="+strconv.FormatInt(end, 10)+"&summary=1",
 		nil,
@@ -2948,7 +2954,7 @@ func TestSummaryAPIEndpointsUseSummaryTable(t *testing.T) {
 		t.Fatalf("unexpected aggregate summary response: %+v", rows)
 	}
 
-	req = httptest.NewRequest(
+	req = localTestRequest(
 		http.MethodGet,
 		"/api/traffic/trend?start="+strconv.FormatInt(start, 10)+"&end="+strconv.FormatInt(end, 10)+"&bucket="+strconv.FormatInt(day, 10)+"&summary=1",
 		nil,
@@ -2966,7 +2972,7 @@ func TestSummaryAPIEndpointsUseSummaryTable(t *testing.T) {
 		t.Fatalf("unexpected trend summary response: %+v", points)
 	}
 
-	req = httptest.NewRequest(
+	req = localTestRequest(
 		http.MethodGet,
 		"/api/traffic/details?dimension=sourceIP&primary=192.168.1.8&secondary=api.example.com&start="+strconv.FormatInt(start, 10)+"&end="+strconv.FormatInt(end, 10)+"&summary=1",
 		nil,
@@ -3066,7 +3072,7 @@ func TestHandleLogsClearsAggregatesAndBuffer(t *testing.T) {
 		t.Fatalf("insert traffic_summary: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/traffic/logs", nil)
+	req := localTestRequest(http.MethodDelete, "/api/traffic/logs", nil)
 	rec := httptest.NewRecorder()
 
 	svc.handleLogs(rec, req)
@@ -3149,7 +3155,7 @@ func TestHandleConnectionDetailsReturnsGroupedDetails(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/traffic/details?dimension=host&primary=a.com&secondary=192.168.1.2&start=1&end=120000", nil)
+	req := localTestRequest(http.MethodGet, "/api/traffic/details?dimension=host&primary=a.com&secondary=192.168.1.2&start=1&end=120000", nil)
 	rec := httptest.NewRecorder()
 
 	svc.handleConnectionDetails(rec, req)
@@ -3200,7 +3206,7 @@ func TestHandleConnectionDetailsIncludesBufferedData(t *testing.T) {
 		Count:         1,
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/traffic/details?dimension=host&primary=a.com&secondary=192.168.1.2&start=1&end=180000", nil)
+	req := localTestRequest(http.MethodGet, "/api/traffic/details?dimension=host&primary=a.com&secondary=192.168.1.2&start=1&end=180000", nil)
 	rec := httptest.NewRecorder()
 
 	svc.handleConnectionDetails(rec, req)
@@ -3610,7 +3616,7 @@ func TestEmbeddedStylesConstrainDashboardHeight(t *testing.T) {
 func TestRoutesServeLicense(t *testing.T) {
 	svc := newTestService(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/LICENSE", nil)
+	req := localTestRequest(http.MethodGet, "/LICENSE", nil)
 	rec := httptest.NewRecorder()
 
 	svc.routes().ServeHTTP(rec, req)
@@ -3645,7 +3651,7 @@ func TestRoutesServeEmbeddedStaticAssets(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req := localTestRequest(http.MethodGet, tc.path, nil)
 			rec := httptest.NewRecorder()
 
 			svc.routes().ServeHTTP(rec, req)
@@ -3806,7 +3812,7 @@ func TestHandleDomainGroupingSettings(t *testing.T) {
 	svc := newTestService(t)
 
 	t.Run("GET returns default true", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/settings/domain-grouping", nil)
+		req := localTestRequest(http.MethodGet, "/api/settings/domain-grouping", nil)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3824,7 +3830,7 @@ func TestHandleDomainGroupingSettings(t *testing.T) {
 
 	t.Run("PUT sets false", func(t *testing.T) {
 		body := bytes.NewBufferString(`{"enabled":false}`)
-		req := httptest.NewRequest(http.MethodPut, "/api/settings/domain-grouping", body)
+		req := localTestRequest(http.MethodPut, "/api/settings/domain-grouping", body)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3845,7 +3851,7 @@ func TestHandleDomainGroupingSettings(t *testing.T) {
 
 	t.Run("PUT sets true", func(t *testing.T) {
 		body := bytes.NewBufferString(`{"enabled":true}`)
-		req := httptest.NewRequest(http.MethodPut, "/api/settings/domain-grouping", body)
+		req := localTestRequest(http.MethodPut, "/api/settings/domain-grouping", body)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3859,7 +3865,7 @@ func TestHandleDomainGroupingSettings(t *testing.T) {
 
 	t.Run("PUT bad JSON returns 400", func(t *testing.T) {
 		body := bytes.NewBufferString(`not-json`)
-		req := httptest.NewRequest(http.MethodPut, "/api/settings/domain-grouping", body)
+		req := localTestRequest(http.MethodPut, "/api/settings/domain-grouping", body)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3869,7 +3875,7 @@ func TestHandleDomainGroupingSettings(t *testing.T) {
 	})
 
 	t.Run("DELETE returns 405", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/settings/domain-grouping", nil)
+		req := localTestRequest(http.MethodDelete, "/api/settings/domain-grouping", nil)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3883,7 +3889,7 @@ func TestHandleDirectTrafficFilterSettings(t *testing.T) {
 	svc := newTestService(t)
 
 	t.Run("GET returns default false", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/settings/direct-traffic-filter", nil)
+		req := localTestRequest(http.MethodGet, "/api/settings/direct-traffic-filter", nil)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3901,7 +3907,7 @@ func TestHandleDirectTrafficFilterSettings(t *testing.T) {
 
 	t.Run("PUT sets true", func(t *testing.T) {
 		body := bytes.NewBufferString(`{"enabled":true}`)
-		req := httptest.NewRequest(http.MethodPut, "/api/settings/direct-traffic-filter", body)
+		req := localTestRequest(http.MethodPut, "/api/settings/direct-traffic-filter", body)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3925,7 +3931,7 @@ func TestHandleDirectTrafficFilterSettings(t *testing.T) {
 
 	t.Run("PUT bad JSON returns 400", func(t *testing.T) {
 		body := bytes.NewBufferString(`not-json`)
-		req := httptest.NewRequest(http.MethodPut, "/api/settings/direct-traffic-filter", body)
+		req := localTestRequest(http.MethodPut, "/api/settings/direct-traffic-filter", body)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
@@ -3935,7 +3941,7 @@ func TestHandleDirectTrafficFilterSettings(t *testing.T) {
 	})
 
 	t.Run("DELETE returns 405", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/settings/direct-traffic-filter", nil)
+		req := localTestRequest(http.MethodDelete, "/api/settings/direct-traffic-filter", nil)
 		rec := httptest.NewRecorder()
 		svc.routes().ServeHTTP(rec, req)
 
